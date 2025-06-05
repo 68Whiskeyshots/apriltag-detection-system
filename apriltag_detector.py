@@ -4,14 +4,14 @@ import numpy as np
 import math
 
 class AprilTagDetector:
-    def __init__(self, camera_matrix=None, dist_coeffs=None, tag_size=0.05, families=["tag36h11", "tag25h9"]):
+    def __init__(self, camera_matrix=None, dist_coeffs=None, tag_size=0.1524, families=["tag36h11", "tag25h9"]):
         """
         Initialize AprilTag detector with camera calibration parameters
         
         Args:
             camera_matrix: 3x3 camera intrinsic matrix
             dist_coeffs: Distortion coefficients
-            tag_size: Physical size of AprilTag in meters (default 5cm)
+            tag_size: Physical size of AprilTag in meters (default 6 inches = 0.1524m)
             families: List of tag families to detect (default: ["tag36h11", "tag25h9"])
         """
         # Convert list to space-separated string for apriltag library
@@ -81,6 +81,9 @@ class AprilTagDetector:
                 # Calculate Euler angles from rotation matrix
                 euler_angles = self.rotation_matrix_to_euler_angles(rmat)
                 
+                # Calculate pixels per inch based on tag corners
+                pixels_per_inch = self.calculate_pixels_per_inch(corners)
+                
                 detected_tag = {
                     'id': tag.tag_id,
                     'family': tag.tag_family.decode('utf-8') if hasattr(tag.tag_family, 'decode') else str(tag.tag_family),
@@ -92,7 +95,8 @@ class AprilTagDetector:
                         'rotation_matrix': rmat,
                         'euler_angles': euler_angles
                     },
-                    'distance': np.linalg.norm(tvec)
+                    'distance': np.linalg.norm(tvec),
+                    'pixels_per_inch': pixels_per_inch
                 }
                 
                 detected_tags.append(detected_tag)
@@ -117,6 +121,46 @@ class AprilTagDetector:
             z = 0
         
         return np.array([x, y, z]) * 180 / math.pi  # Convert to degrees
+    
+    def calculate_pixels_per_inch(self, corners):
+        """
+        Calculate pixels per inch based on detected tag corners and known 6" size
+        
+        Args:
+            corners: 4x2 array of corner coordinates in pixels
+            
+        Returns:
+            Dictionary with pixels per inch for width, height, and average
+        """
+        # Calculate pixel distances between corners
+        # Top edge (corner 0 to corner 1)
+        top_width_pixels = np.linalg.norm(corners[1] - corners[0])
+        # Bottom edge (corner 3 to corner 2)
+        bottom_width_pixels = np.linalg.norm(corners[2] - corners[3])
+        # Left edge (corner 0 to corner 3)
+        left_height_pixels = np.linalg.norm(corners[3] - corners[0])
+        # Right edge (corner 1 to corner 2)
+        right_height_pixels = np.linalg.norm(corners[2] - corners[1])
+        
+        # Average the measurements
+        avg_width_pixels = (top_width_pixels + bottom_width_pixels) / 2
+        avg_height_pixels = (left_height_pixels + right_height_pixels) / 2
+        
+        # Tag is 6 inches on each side
+        tag_size_inches = 6.0
+        
+        # Calculate pixels per inch
+        pixels_per_inch_width = avg_width_pixels / tag_size_inches
+        pixels_per_inch_height = avg_height_pixels / tag_size_inches
+        pixels_per_inch_avg = (pixels_per_inch_width + pixels_per_inch_height) / 2
+        
+        return {
+            'width': pixels_per_inch_width,
+            'height': pixels_per_inch_height,
+            'average': pixels_per_inch_avg,
+            'tag_width_pixels': avg_width_pixels,
+            'tag_height_pixels': avg_height_pixels
+        }
     
     def draw_pose(self, image, tag_data):
         """
@@ -171,12 +215,14 @@ class AprilTagDetector:
         # Draw pose information
         distance = tag_data['distance']
         euler = pose['euler_angles']
+        ppi = tag_data['pixels_per_inch']
         
         info_text = [
             f"Distance: {distance:.3f}m",
             f"Roll: {euler[0]:.1f}°",
             f"Pitch: {euler[1]:.1f}°",
-            f"Yaw: {euler[2]:.1f}°"
+            f"Yaw: {euler[2]:.1f}°",
+            f"PPI: {ppi['average']:.1f}"
         ]
         
         y_offset = int(center[1]) + 30

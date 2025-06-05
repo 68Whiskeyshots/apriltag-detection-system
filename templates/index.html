@@ -3,149 +3,221 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AprilTag Detection & Pose Estimation</title>
+    <title>BANDIT - AprilTag Detection System</title>
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        * {
             margin: 0;
-            padding: 20px;
-            background-color: #f0f2f5;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #f8fafc;
+            color: #334155;
+            line-height: 1.6;
         }
         
         .container {
-            max-width: 1400px;
+            max-width: 1440px;
             margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            overflow: hidden;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 24px 32px;
         }
         
-        .header h1 {
-            margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-            font-size: 1.1em;
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .logo {
+            width: 48px;
+            height: 48px;
+            background: #1e293b;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #ffffff;
+            font-size: 18px;
+        }
+        
+        .brand-info h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 2px;
+        }
+        
+        .company-name {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
+        }
+        
+        .header-meta {
+            text-align: right;
+        }
+        
+        .version {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
         }
         
         .main-content {
             display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 30px;
-            padding: 30px;
+            grid-template-columns: 1fr 400px;
+            background: #f8fafc;
         }
         
         .video-section {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            padding: 32px;
+            background: #ffffff;
+            border-right: 1px solid #e2e8f0;
         }
         
         .video-container {
             position: relative;
-            background: #000;
+            background: #000000;
             border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            margin-bottom: 24px;
+            border: 1px solid #e2e8f0;
         }
         
         #videoFeed {
             width: 100%;
             height: auto;
             display: block;
-            max-width: 640px;
+            max-width: 100%;
         }
         
         .video-overlay {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.7);
-            color: white;
+            top: 16px;
+            right: 16px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #ffffff;
             padding: 8px 12px;
             border-radius: 6px;
-            font-size: 0.9em;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'Inter', monospace;
         }
         
         .controls {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             align-items: center;
+            flex-wrap: wrap;
         }
         
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
+            background: #1e293b;
+            color: #ffffff;
+            border: 1px solid #334155;
+            padding: 10px 20px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9em;
+            font-size: 14px;
             font-weight: 500;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
         }
         
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            background: #334155;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         
         .btn:active {
-            transform: translateY(0);
+            transform: translateY(1px);
+        }
+        
+        .btn.primary {
+            background: #3b82f6;
+            border-color: #2563eb;
+        }
+        
+        .btn.primary:hover {
+            background: #2563eb;
         }
         
         .status {
             padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9em;
+            border-radius: 6px;
+            font-size: 14px;
             font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .status.connected {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
         }
         
         .status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
         }
         
         .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+            background: #f8fafc;
+            padding: 32px 24px;
+            overflow-y: auto;
         }
         
         .info-panel {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 20px;
-            border-left: 4px solid #667eea;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         
         .info-panel h3 {
-            margin: 0 0 15px 0;
-            color: #495057;
-            font-size: 1.2em;
+            margin: 0 0 16px 0;
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 600;
         }
         
         .tag-list {
@@ -153,74 +225,213 @@
             overflow-y: auto;
         }
         
+        .tag-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .tag-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        
+        .tag-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
         .tag-item {
-            background: white;
+            background: #f8fafc;
             border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border: 1px solid #e9ecef;
-            transition: all 0.3s ease;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
         }
         
         .tag-item:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e1;
         }
         
         .tag-id {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 12px;
         }
         
         .tag-info {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            font-size: 0.9em;
-            color: #6c757d;
+            gap: 8px;
+            font-size: 13px;
+            color: #64748b;
         }
         
         .tag-info span {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
+        }
+        
+        .tag-info strong {
+            color: #374151;
+            font-weight: 500;
         }
         
         .stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
+            gap: 16px;
         }
         
         .stat-card {
-            background: white;
+            background: #f8fafc;
             border-radius: 8px;
-            padding: 15px;
+            padding: 16px;
             text-align: center;
-            border: 1px solid #e9ecef;
+            border: 1px solid #e2e8f0;
         }
         
         .stat-value {
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e293b;
             display: block;
+            font-family: 'Inter', monospace;
         }
         
         .stat-label {
-            color: #6c757d;
-            font-size: 0.9em;
-            margin-top: 5px;
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 4px;
+            font-weight: 500;
         }
         
         .coordinates {
-            font-family: 'Courier New', monospace;
-            font-size: 0.8em;
-            background: #f8f9fa;
-            padding: 8px;
+            font-family: 'Inter', monospace;
+            font-size: 12px;
+            background: #f1f5f9;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            border: 1px solid #e2e8f0;
+            color: #475569;
+        }
+        
+        .collapsible-panel {
+            margin-bottom: 24px;
+        }
+        
+        .panel-header {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px 8px 0 0;
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background-color 0.2s ease;
+        }
+        
+        .panel-header:hover {
+            background: #e2e8f0;
+        }
+        
+        .panel-header.collapsed {
+            border-radius: 8px;
+        }
+        
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        
+        .panel-chevron {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.2s ease;
+            color: #64748b;
+        }
+        
+        .panel-chevron.expanded {
+            transform: rotate(180deg);
+        }
+        
+        .panel-content {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            padding: 16px;
+            display: none;
+        }
+        
+        .panel-content.expanded {
+            display: block;
+        }
+        
+        .camera-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .camera-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .camera-item:hover {
+            background: #f1f5f9;
+        }
+        
+        .camera-item.active {
+            background: #dbeafe;
+            border-color: #3b82f6;
+        }
+        
+        .camera-info {
+            flex: 1;
+        }
+        
+        .camera-name {
+            font-weight: 500;
+            color: #1e293b;
+            font-size: 14px;
+        }
+        
+        .camera-details {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+        
+        .camera-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
             border-radius: 4px;
-            margin-top: 8px;
+        }
+        
+        .current-badge {
+            background: #22c55e;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
         }
         
         @media (max-width: 1024px) {
@@ -228,15 +439,29 @@
                 grid-template-columns: 1fr;
             }
             
-            .controls {
-                flex-wrap: wrap;
-                justify-content: center;
+            .video-section {
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
             }
         }
         
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2em;
+            .header {
+                padding: 16px 20px;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 16px;
+                align-items: flex-start;
+            }
+            
+            .video-section {
+                padding: 20px;
+            }
+            
+            .sidebar {
+                padding: 20px 16px;
             }
             
             .stats-grid {
@@ -248,8 +473,22 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>AprilTag Detection & Pose Estimation</h1>
-            <p>Real-time computer vision with 6DOF pose tracking</p>
+            <div class="header-content">
+                <div class="brand-section">
+                    <div class="logo">B</div>
+                    <div class="brand-info">
+                        <h1>BANDIT</h1>
+                        <div class="company-name">Dark Matter Labs</div>
+                    </div>
+                </div>
+                <div class="header-meta">
+                    <div class="version">Version 2.1.0</div>
+                    <div class="status-indicator">
+                        <div class="status-dot"></div>
+                        System Operational
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="main-content">
@@ -262,7 +501,7 @@
                 </div>
                 
                 <div class="controls">
-                    <button class="btn" onclick="startDetection()">Start Detection</button>
+                    <button class="btn primary" onclick="startDetection()">Start Detection</button>
                     <button class="btn" onclick="stopDetection()">Stop Detection</button>
                     <button class="btn" onclick="calibrateCamera()">Calibrate Camera</button>
                     <div class="status" id="connectionStatus">Connecting...</div>
@@ -270,6 +509,25 @@
             </div>
             
             <div class="sidebar">
+                <div class="collapsible-panel">
+                    <div class="panel-header collapsed" onclick="togglePanel('cameraOptions')">
+                        <span class="panel-title">Camera Options</span>
+                        <svg class="panel-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </div>
+                    <div class="panel-content" id="cameraOptions">
+                        <div class="camera-list" id="cameraList">
+                            <div style="text-align: center; color: #64748b; padding: 20px;">
+                                Loading cameras...
+                            </div>
+                        </div>
+                        <button class="btn btn-small" onclick="refreshCameras()" style="margin-top: 12px; width: 100%;">
+                            Refresh Camera List
+                        </button>
+                    </div>
+                </div>
+                
                 <div class="info-panel">
                     <h3>Detection Statistics</h3>
                     <div class="stats-grid">
@@ -287,17 +545,19 @@
                 <div class="info-panel">
                     <h3>Detected Tags</h3>
                     <div class="tag-list" id="tagList">
-                        <p style="text-align: center; color: #6c757d; margin: 20px 0;">No tags detected</p>
+                        <p style="text-align: center; color: #64748b; margin: 20px 0;">No tags detected</p>
                     </div>
                 </div>
                 
                 <div class="info-panel">
-                    <h3>System Info</h3>
-                    <div style="font-size: 0.9em; color: #6c757d;">
-                        <p><strong>Camera:</strong> <span id="cameraInfo">640x480</span></p>
-                        <p><strong>Detection Family:</strong> tag36h11</p>
-                        <p><strong>Pose Method:</strong> PnP + Rodrigues</p>
-                        <p><strong>Coordinate System:</strong> Right-handed</p>
+                    <h3>System Configuration</h3>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.5;">
+                        <p><strong style="color: #374151;">Camera Resolution:</strong> <span id="cameraInfo">640×480</span></p>
+                        <p><strong style="color: #374151;">Detection Families:</strong> tag36h11, tag25h9</p>
+                        <p><strong style="color: #374151;">Tag Size:</strong> 6.0" × 6.0"</p>
+                        <p><strong style="color: #374151;">Pose Algorithm:</strong> PnP + Rodrigues</p>
+                        <p><strong style="color: #374151;">Coordinate System:</strong> Right-handed (X, Y, Z)</p>
+                        <p><strong style="color: #374151;">Measurement Units:</strong> Meters, Degrees, PPI</p>
                     </div>
                 </div>
             </div>
@@ -331,6 +591,29 @@
             updateFPS();
         });
 
+        socket.on('calibration_result', function(data) {
+            if (data.success) {
+                showNotification('Success', data.message, 'success');
+                if (data.calibration_data) {
+                    console.log('Calibration saved:', data.calibration_data);
+                    // Update UI to show calibration is complete
+                    updateCalibrationStatus(data.calibration_data);
+                }
+            } else {
+                showNotification('Calibration Failed', data.message, 'error');
+            }
+        });
+
+        socket.on('camera_switch_result', function(data) {
+            if (data.success) {
+                showNotification('Camera Switched', data.message, 'success');
+                // Refresh camera list to update current camera
+                loadCameras();
+            } else {
+                showNotification('Camera Switch Failed', data.message, 'error');
+            }
+        });
+
         function updateVideoFeed(imageData) {
             // The video feed is handled by the /video_feed route
             // This function could be used for WebSocket-based streaming if needed
@@ -344,7 +627,7 @@
             tagCount.textContent = tags.length;
 
             if (tags.length === 0) {
-                tagList.innerHTML = '<p style="text-align: center; color: #6c757d; margin: 20px 0;">No tags detected</p>';
+                tagList.innerHTML = '<p style="text-align: center; color: #b8c6db; margin: 20px 0;">No tags detected</p>';
                 avgDistance.textContent = '--';
                 return;
             }
@@ -381,10 +664,13 @@
                     <span><strong>X:</strong> ${translation[0].toFixed(3)}m</span>
                     <span><strong>Y:</strong> ${translation[1].toFixed(3)}m</span>
                     <span><strong>Z:</strong> ${translation[2].toFixed(3)}m</span>
+                    <span><strong>PPI:</strong> ${tag.pixels_per_inch.average.toFixed(1)}</span>
+                    <span><strong>Tag Size:</strong> ${Math.round(tag.pixels_per_inch.tag_width_pixels)}×${Math.round(tag.pixels_per_inch.tag_height_pixels)}px</span>
                 </div>
                 <div class="coordinates">
                     Position: [${translation.map(v => v.toFixed(3)).join(', ')}]<br>
-                    Rotation: [${euler.map(v => v.toFixed(1)).join(', ')}]°
+                    Rotation: [${euler.map(v => v.toFixed(1)).join(', ')}]°<br>
+                    PPI: W=${tag.pixels_per_inch.width.toFixed(1)}, H=${tag.pixels_per_inch.height.toFixed(1)}
                 </div>
             `;
             
@@ -414,7 +700,169 @@
         }
 
         function calibrateCamera() {
-            alert('Camera calibration feature would be implemented here.\nFor now, using default camera parameters.');
+            // Disable the button during calibration
+            const calibrateBtn = document.querySelector('button[onclick="calibrateCamera()"]');
+            const originalText = calibrateBtn.textContent;
+            calibrateBtn.disabled = true;
+            calibrateBtn.textContent = 'Calibrating...';
+            
+            // Send calibration request
+            socket.emit('calibrate_camera');
+            
+            // Re-enable button after a delay
+            setTimeout(() => {
+                calibrateBtn.disabled = false;
+                calibrateBtn.textContent = originalText;
+            }, 3000);
+        }
+
+        function showNotification(title, message, type) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 16px 20px;
+                border-radius: 8px;
+                color: white;
+                font-weight: 500;
+                max-width: 400px;
+                z-index: 1000;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                background: ${type === 'success' ? '#22c55e' : '#ef4444'};
+            `;
+            
+            notification.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 4px;">${title}</div>
+                <div style="font-size: 14px; opacity: 0.9;">${message}</div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+
+        function updateCalibrationStatus(calibrationData) {
+            // Update system info to show current calibration
+            const systemInfo = document.querySelector('.info-panel:last-child div');
+            const ppiInfo = document.createElement('p');
+            ppiInfo.innerHTML = `<strong style="color: #374151;">Current Calibration:</strong> ${calibrationData.pixels_per_inch.toFixed(2)} PPI (${calibrationData.tags_used} tags)`;
+            ppiInfo.style.color = '#22c55e';
+            ppiInfo.style.fontWeight = '500';
+            systemInfo.appendChild(ppiInfo);
+        }
+
+        // Load current calibration on page load
+        function loadCurrentCalibration() {
+            fetch('/api/calibration')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateCalibrationStatus({
+                            pixels_per_inch: data.calibration.calibrated_pixels_per_inch,
+                            tags_used: data.calibration.tags_used
+                        });
+                    }
+                })
+                .catch(error => console.log('No previous calibration found'));
+        }
+
+        // Panel toggle functionality
+        function togglePanel(panelId) {
+            const header = document.querySelector(`[onclick="togglePanel('${panelId}')"]`);
+            const content = document.getElementById(panelId);
+            const chevron = header.querySelector('.panel-chevron');
+            
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                header.classList.add('collapsed');
+                chevron.classList.remove('expanded');
+            } else {
+                content.classList.add('expanded');
+                header.classList.remove('collapsed');
+                chevron.classList.add('expanded');
+                
+                // Load cameras when opening panel
+                if (panelId === 'cameraOptions') {
+                    loadCameras();
+                }
+            }
+        }
+
+        // Load available cameras
+        function loadCameras() {
+            fetch('/api/cameras')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayCameras(data.cameras, data.current_camera);
+                    } else {
+                        document.getElementById('cameraList').innerHTML = 
+                            '<div style="text-align: center; color: #ef4444; padding: 20px;">Failed to load cameras</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading cameras:', error);
+                    document.getElementById('cameraList').innerHTML = 
+                        '<div style="text-align: center; color: #ef4444; padding: 20px;">Error loading cameras</div>';
+                });
+        }
+
+        // Display camera list
+        function displayCameras(cameras, currentCamera) {
+            const cameraList = document.getElementById('cameraList');
+            
+            if (cameras.length === 0) {
+                cameraList.innerHTML = 
+                    '<div style="text-align: center; color: #64748b; padding: 20px;">No cameras found</div>';
+                return;
+            }
+            
+            cameraList.innerHTML = '';
+            
+            cameras.forEach(camera => {
+                const cameraItem = document.createElement('div');
+                cameraItem.className = `camera-item ${camera.is_current ? 'active' : ''}`;
+                
+                cameraItem.innerHTML = `
+                    <div class="camera-info">
+                        <div class="camera-name">
+                            ${camera.name}
+                            ${camera.is_current ? '<span class="current-badge">Current</span>' : ''}
+                        </div>
+                        <div class="camera-details">${camera.resolution} • ${camera.fps} FPS</div>
+                    </div>
+                    <div class="camera-actions">
+                        ${!camera.is_current ? `<button class="btn btn-small primary" onclick="switchCamera(${camera.index})">Switch</button>` : ''}
+                    </div>
+                `;
+                
+                cameraList.appendChild(cameraItem);
+            });
+        }
+
+        // Switch camera
+        function switchCamera(cameraIndex) {
+            socket.emit('switch_camera', { camera_index: cameraIndex });
+        }
+
+        // Refresh camera list
+        function refreshCameras() {
+            const refreshBtn = document.querySelector('button[onclick="refreshCameras()"]');
+            const originalText = refreshBtn.textContent;
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = 'Refreshing...';
+            
+            loadCameras();
+            
+            setTimeout(() => {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = originalText;
+            }, 2000);
         }
 
         // Auto-refresh tag data
@@ -424,9 +872,10 @@
             }
         }, 100); // 10 FPS for tag data updates
 
-        // Start detection automatically
+        // Start detection automatically and load calibration
         window.addEventListener('load', () => {
             setTimeout(startDetection, 1000);
+            loadCurrentCalibration();
         });
     </script>
 </body>

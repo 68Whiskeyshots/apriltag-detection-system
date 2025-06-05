@@ -1,13 +1,15 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template, Response, jsonify
+from flask import Flask, render_template, Response, jsonify, request
 from flask_socketio import SocketIO, emit
 import cv2
 import json
 import numpy as np
 from apriltag_detector import AprilTagDetector
 import base64
+import os
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'apriltag_detection_secret'
@@ -173,6 +175,13 @@ def get_tags():
             'pose': {
                 'translation': tag['pose']['translation'].tolist(),
                 'euler_angles': tag['pose']['euler_angles'].tolist()
+            },
+            'pixels_per_inch': {
+                'width': float(tag['pixels_per_inch']['width']),
+                'height': float(tag['pixels_per_inch']['height']),
+                'average': float(tag['pixels_per_inch']['average']),
+                'tag_width_pixels': float(tag['pixels_per_inch']['tag_width_pixels']),
+                'tag_height_pixels': float(tag['pixels_per_inch']['tag_height_pixels'])
             }
         }
         serializable_tags.append(serializable_tag)
@@ -222,6 +231,13 @@ def handle_get_frame():
                 'pose': {
                     'translation': tag['pose']['translation'].tolist(),
                     'euler_angles': tag['pose']['euler_angles'].tolist()
+                },
+                'pixels_per_inch': {
+                    'width': float(tag['pixels_per_inch']['width']),
+                    'height': float(tag['pixels_per_inch']['height']),
+                    'average': float(tag['pixels_per_inch']['average']),
+                    'tag_width_pixels': float(tag['pixels_per_inch']['tag_width_pixels']),
+                    'tag_height_pixels': float(tag['pixels_per_inch']['tag_height_pixels'])
                 }
             }
             serializable_tags.append(serializable_tag)
@@ -229,6 +245,205 @@ def handle_get_frame():
         emit('frame_data', {
             'image': frame_data,
             'tags': serializable_tags
+        })
+
+@socketio.on('calibrate_camera')
+def handle_calibrate_camera():
+    """Calibrate camera using current AprilTag detections and save calibration data"""
+    cam = get_camera()
+    frame_data, tags = cam.get_frame()
+    
+    if not tags or len(tags) == 0:
+        emit('calibration_result', {
+            'success': False,
+            'message': 'No AprilTags detected. Please ensure at least one 6" AprilTag is visible in the camera view.'
+        })
+        return
+    
+    # Calculate average pixels per inch from all detected tags
+    total_ppi = 0
+    tag_count = len(tags)
+    calibration_data = {
+        'timestamp': datetime.now().isoformat(),
+        'tags_used': tag_count,
+        'individual_measurements': [],
+        'camera_resolution': {
+            'width': 640,
+            'height': 480
+        }
+    }
+    
+    for tag in tags:
+        ppi = tag['pixels_per_inch']
+        total_ppi += ppi['average']
+        calibration_data['individual_measurements'].append({
+            'tag_id': tag['id'],
+            'ppi_width': ppi['width'],
+            'ppi_height': ppi['height'],
+            'ppi_average': ppi['average'],
+            'tag_size_pixels': {
+                'width': ppi['tag_width_pixels'],
+                'height': ppi['tag_height_pixels']
+            },
+            'distance': tag['distance']
+        })
+    
+    # Calculate final calibrated pixels per inch
+    calibrated_ppi = total_ppi / tag_count
+    calibration_data['calibrated_pixels_per_inch'] = calibrated_ppi
+    calibration_data['accuracy_notes'] = f'Calibrated using {tag_count} AprilTag(s) at various distances'
+    
+    # Save calibration to file
+    try:
+        os.makedirs('calibration', exist_ok=True)
+        calibration_file = f'calibration/camera_calibration_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        with open(calibration_file, 'w') as f:
+            json.dump(calibration_data, f, indent=2)
+        
+        # Also save as the current/active calibration
+        with open('calibration/current_calibration.json', 'w') as f:
+            json.dump(calibration_data, f, indent=2)
+        
+        emit('calibration_result', {
+            'success': True,
+            'message': f'Camera calibrated successfully! Pixels per inch: {calibrated_ppi:.2f}',
+            'calibration_data': {
+                'pixels_per_inch': calibrated_ppi,
+                'tags_used': tag_count,
+                'timestamp': calibration_data['timestamp'],
+                'filename': calibration_file
+            }
+        })
+        
+    except Exception as e:
+        emit('calibration_result', {
+            'success': False,
+            'message': f'Failed to save calibration: {str(e)}'
+        })
+
+@app.route('/api/cameras')
+def get_available_cameras():
+    """Get list of available camera devices"""
+    available_cameras = []
+    
+    # Test camera indices 0-5
+    for index in range(6):
+        try:
+            cap = cv2.VideoCapture(index)
+            if cap.isOpened():
+                # Try to read a frame to verify it's working
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    # Get camera properties
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    
+                    available_cameras.append({
+                        'index': index,
+                        'name': f'Camera {index}',
+                        'resolution': f'{width}x{height}',
+                        'fps': fps if fps > 0 else 'Unknown',
+                        'is_current': index == (camera.source if camera else 0)
+                    })
+                cap.release()
+        except:
+            continue
+    
+    return jsonify({
+        'success': True,
+        'cameras': available_cameras,
+        'current_camera': camera.source if camera else None
+    })
+
+@socketio.on('switch_camera')
+def handle_switch_camera(data):
+    """Switch to a different camera"""
+    global camera
+    new_camera_index = data.get('camera_index', 0)
+    
+    try:
+        # Release current camera
+        if camera:
+            if camera.camera:
+                camera.camera.release()
+            camera = None
+        
+        # Initialize new camera
+        camera = VideoCamera(new_camera_index)
+        
+        emit('camera_switch_result', {
+            'success': True,
+            'message': f'Switched to Camera {new_camera_index}',
+            'camera_index': new_camera_index
+        })
+        
+    except Exception as e:
+        emit('camera_switch_result', {
+            'success': False,
+            'message': f'Failed to switch camera: {str(e)}'
+        })
+
+@app.route('/api/calibration')
+def get_current_calibration():
+    """Get the current camera calibration data"""
+    try:
+        if os.path.exists('calibration/current_calibration.json'):
+            with open('calibration/current_calibration.json', 'r') as f:
+                calibration_data = json.load(f)
+            return jsonify({
+                'success': True,
+                'calibration': calibration_data
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No calibration data found. Please calibrate the camera first.'
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error reading calibration: {str(e)}'
+        })
+
+@app.route('/api/measure', methods=['POST'])
+def measure_distance():
+    """Use calibration to measure distances between points in pixels"""
+    try:
+        data = request.get_json()
+        if not os.path.exists('calibration/current_calibration.json'):
+            return jsonify({
+                'success': False,
+                'message': 'No calibration data available. Please calibrate camera first.'
+            })
+        
+        with open('calibration/current_calibration.json', 'r') as f:
+            calibration = json.load(f)
+        
+        pixels_per_inch = calibration['calibrated_pixels_per_inch']
+        
+        # Calculate distance between two points in pixels
+        x1, y1 = data['point1']['x'], data['point1']['y']
+        x2, y2 = data['point2']['x'], data['point2']['y']
+        
+        pixel_distance = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+        inch_distance = pixel_distance / pixels_per_inch
+        
+        return jsonify({
+            'success': True,
+            'measurement': {
+                'pixel_distance': pixel_distance,
+                'inch_distance': inch_distance,
+                'cm_distance': inch_distance * 2.54,
+                'mm_distance': inch_distance * 25.4
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Measurement error: {str(e)}'
         })
 
 if __name__ == '__main__':

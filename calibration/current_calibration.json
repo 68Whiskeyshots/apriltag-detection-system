@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-06-04T19:56:18.848179",
+  "tags_used": 1,
+  "individual_measurements": [
+    {
+      "tag_id": 7,
+      "ppi_width": 14.480245745417166,
+      "ppi_height": 14.800526141435334,
+      "ppi_average": 14.64038594342625,
+      "tag_size_pixels": {
+        "width": 86.881474472503,
+        "height": 88.803156848612
+      },
+      "distance": 1.3780696133961126
+    }
+  ],
+  "camera_resolution": {
+    "width": 640,
+    "height": 480
+  },
+  "calibrated_pixels_per_inch": 14.64038594342625,
+  "accuracy_notes": "Calibrated using 1 AprilTag(s) at various distances"
+}
