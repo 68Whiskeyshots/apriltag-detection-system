@@ -545,8 +545,15 @@
             <div class="video-section">
                 <div class="video-container">
                     <img id="videoFeed" src="/video_feed" alt="Video Feed">
+                    <canvas id="measurementCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 2;"></canvas>
                     <div class="video-overlay">
                         <span id="fps">FPS: --</span>
+                        <div id="measurementInfo" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 8px; border-radius: 4px; font-size: 12px; display: none;">
+                            <div id="measurementText"></div>
+                            <div style="margin-top: 4px;">
+                                <button onclick="clearMeasurement()" style="background: #ef4444; border: none; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">Clear</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -554,6 +561,7 @@
                     <button class="btn primary" onclick="startDetection()">Start Detection</button>
                     <button class="btn" onclick="stopDetection()">Stop Detection</button>
                     <button class="btn" onclick="calibrateCamera()">Calibrate Camera</button>
+                    <button class="btn" id="measureBtn" onclick="toggleMeasurement()" disabled title="Calibrate camera first">📏 Measure</button>
                     <div class="status" id="connectionStatus">Connecting...</div>
                 </div>
             </div>
@@ -670,6 +678,34 @@
                     <h3>Detected Objects</h3>
                     <div class="tag-list" id="objectList">
                         <p style="text-align: center; color: #64748b; margin: 20px 0;">No objects detected</p>
+                    </div>
+                </div>
+                
+                <div class="info-panel" id="measurementPanel" style="display: none;">
+                    <h3>Manual Measurement</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
+                            Click and drag on the video to measure distances. Camera calibration required.
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                            <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                                <input type="radio" name="measurementUnit" value="metric" checked>
+                                Metric (mm/m)
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                                <input type="radio" name="measurementUnit" value="imperial">
+                                Imperial (in/ft)
+                            </label>
+                        </div>
+                        <div id="calibrationStatus" style="font-size: 12px; padding: 8px; border-radius: 4px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">
+                            ⚠️ Camera not calibrated. Use "Calibrate Camera" first.
+                        </div>
+                        <div id="measurementResults" style="display: none; margin-top: 12px;">
+                            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px;">
+                                <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #0c4a6e;">Measurement Results</div>
+                                <div id="measurementValues" style="font-size: 13px; color: #374151;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -1219,6 +1255,224 @@
                 refreshBtn.disabled = false;
                 refreshBtn.textContent = originalText;
             }, 2000);
+        }
+
+        // Manual Measurement Functionality
+        let measurementMode = false;
+        let isDrawing = false;
+        let startPoint = null;
+        let canvas = null;
+        let ctx = null;
+        let isCalibrated = false;
+
+        function toggleMeasurement() {
+            measurementMode = !measurementMode;
+            const btn = document.getElementById('measureBtn');
+            const panel = document.getElementById('measurementPanel');
+            const videoContainer = document.querySelector('.video-container');
+            
+            if (measurementMode) {
+                btn.textContent = '📏 Exit Measure';
+                btn.classList.add('primary');
+                panel.style.display = 'block';
+                setupMeasurementCanvas();
+                videoContainer.style.cursor = 'crosshair';
+            } else {
+                btn.textContent = '📏 Measure';
+                btn.classList.remove('primary');
+                panel.style.display = 'none';
+                clearMeasurement();
+                videoContainer.style.cursor = 'default';
+                if (canvas) {
+                    canvas.style.pointerEvents = 'none';
+                }
+            }
+        }
+
+        function setupMeasurementCanvas() {
+            canvas = document.getElementById('measurementCanvas');
+            const videoFeed = document.getElementById('videoFeed');
+            
+            // Match canvas size to video
+            canvas.width = videoFeed.offsetWidth;
+            canvas.height = videoFeed.offsetHeight;
+            canvas.style.width = videoFeed.offsetWidth + 'px';
+            canvas.style.height = videoFeed.offsetHeight + 'px';
+            canvas.style.pointerEvents = 'auto';
+            
+            ctx = canvas.getContext('2d');
+            
+            // Add event listeners
+            canvas.addEventListener('mousedown', startMeasurement);
+            canvas.addEventListener('mousemove', updateMeasurement);
+            canvas.addEventListener('mouseup', endMeasurement);
+        }
+
+        function startMeasurement(e) {
+            if (!measurementMode || !isCalibrated) return;
+            
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            startPoint = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            
+            clearCanvas();
+        }
+
+        function updateMeasurement(e) {
+            if (!isDrawing || !measurementMode) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const currentPoint = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            
+            clearCanvas();
+            drawMeasurementLine(startPoint, currentPoint);
+        }
+
+        function endMeasurement(e) {
+            if (!isDrawing || !measurementMode) return;
+            
+            isDrawing = false;
+            const rect = canvas.getBoundingClientRect();
+            const endPoint = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            
+            calculateMeasurement(startPoint, endPoint);
+        }
+
+        function drawMeasurementLine(start, end) {
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+            
+            // Draw start and end points
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.arc(start.x, start.y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(end.x, end.y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function calculateMeasurement(point1, point2) {
+            // Scale points to actual video resolution (640x480)
+            const videoFeed = document.getElementById('videoFeed');
+            const scaleX = 640 / videoFeed.offsetWidth;
+            const scaleY = 480 / videoFeed.offsetHeight;
+            
+            const scaledPoint1 = {
+                x: point1.x * scaleX,
+                y: point1.y * scaleY
+            };
+            const scaledPoint2 = {
+                x: point2.x * scaleX,
+                y: point2.y * scaleY
+            };
+            
+            fetch('/api/measure', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    point1: scaledPoint1,
+                    point2: scaledPoint2
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayMeasurementResults(data.measurement);
+                } else {
+                    showNotification('Measurement Error', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Measurement Error', 'Network error', 'error');
+            });
+        }
+
+        function displayMeasurementResults(measurement) {
+            const isMetric = document.querySelector('input[name="measurementUnit"]:checked').value === 'metric';
+            const resultsDiv = document.getElementById('measurementResults');
+            const valuesDiv = document.getElementById('measurementValues');
+            
+            let displayText = '';
+            if (isMetric) {
+                if (measurement.cm_distance > 100) {
+                    displayText = `<strong>${(measurement.cm_distance / 100).toFixed(2)} m</strong>`;
+                } else {
+                    displayText = `<strong>${measurement.mm_distance.toFixed(1)} mm</strong>`;
+                }
+                displayText += `<br><span style="color: #64748b;">Alternative: ${measurement.inch_distance.toFixed(2)} inches</span>`;
+            } else {
+                if (measurement.inch_distance > 12) {
+                    displayText = `<strong>${(measurement.inch_distance / 12).toFixed(2)} ft</strong>`;
+                } else {
+                    displayText = `<strong>${measurement.inch_distance.toFixed(2)} in</strong>`;
+                }
+                displayText += `<br><span style="color: #64748b;">Alternative: ${measurement.cm_distance.toFixed(1)} cm</span>`;
+            }
+            
+            valuesDiv.innerHTML = displayText;
+            resultsDiv.style.display = 'block';
+            
+            // Update overlay info
+            const overlayInfo = document.getElementById('measurementInfo');
+            const overlayText = document.getElementById('measurementText');
+            overlayText.innerHTML = displayText.replace('<br>', ' / ');
+            overlayInfo.style.display = 'block';
+        }
+
+        function clearMeasurement() {
+            if (canvas && ctx) {
+                clearCanvas();
+            }
+            document.getElementById('measurementResults').style.display = 'none';
+            document.getElementById('measurementInfo').style.display = 'none';
+        }
+
+        function clearCanvas() {
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function updateCalibrationStatus(calibrationData) {
+            isCalibrated = true;
+            const measureBtn = document.getElementById('measureBtn');
+            const calibrationStatus = document.getElementById('calibrationStatus');
+            
+            measureBtn.disabled = false;
+            measureBtn.title = 'Click to start measuring distances';
+            
+            calibrationStatus.style.background = '#f0fdf4';
+            calibrationStatus.style.color = '#15803d';
+            calibrationStatus.style.borderColor = '#bbf7d0';
+            calibrationStatus.innerHTML = `✅ Camera calibrated. PPI: ${calibrationData.pixels_per_inch.toFixed(2)}`;
+        }
+
+        function loadCurrentCalibration() {
+            fetch('/api/calibration')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.calibration) {
+                        updateCalibrationStatus(data.calibration);
+                    }
+                })
+                .catch(error => console.log('No existing calibration found'));
         }
 
         // Auto-refresh tag data
