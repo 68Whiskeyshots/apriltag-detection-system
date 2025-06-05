@@ -685,7 +685,7 @@
                     <h3>Manual Measurement</h3>
                     <div style="margin-bottom: 16px;">
                         <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
-                            Click and drag on the video to measure distances. Camera calibration required.
+                            Click and drag on the video to draw a measurement box. Camera calibration required.
                         </div>
                         <div style="display: flex; gap: 8px; margin-bottom: 12px;">
                             <label style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
@@ -1348,24 +1348,58 @@
         }
 
         function drawMeasurementLine(start, end) {
+            // Draw rectangle instead of line
+            const width = end.x - start.x;
+            const height = end.y - start.y;
+            
             ctx.strokeStyle = '#3b82f6';
             ctx.lineWidth = 2;
             ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.1)'; // Light blue fill
             
+            // Draw filled rectangle
+            ctx.fillRect(start.x, start.y, width, height);
+            
+            // Draw rectangle outline
             ctx.beginPath();
-            ctx.moveTo(start.x, start.y);
-            ctx.lineTo(end.x, end.y);
+            ctx.rect(start.x, start.y, width, height);
             ctx.stroke();
             
-            // Draw start and end points
+            // Draw corner points
             ctx.fillStyle = '#3b82f6';
-            ctx.beginPath();
-            ctx.arc(start.x, start.y, 4, 0, 2 * Math.PI);
-            ctx.fill();
+            const corners = [
+                {x: start.x, y: start.y},
+                {x: end.x, y: start.y},
+                {x: end.x, y: end.y},
+                {x: start.x, y: end.y}
+            ];
             
-            ctx.beginPath();
-            ctx.arc(end.x, end.y, 4, 0, 2 * Math.PI);
-            ctx.fill();
+            corners.forEach(corner => {
+                ctx.beginPath();
+                ctx.arc(corner.x, corner.y, 3, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            
+            // Add dimension labels
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            ctx.font = '12px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            
+            // Width label (top center)
+            const widthText = `W: ${Math.abs(width).toFixed(0)}px`;
+            const widthX = start.x + width / 2;
+            const widthY = start.y - 8;
+            ctx.strokeText(widthText, widthX, widthY);
+            ctx.fillText(widthText, widthX, widthY);
+            
+            // Height label (right center)
+            const heightText = `H: ${Math.abs(height).toFixed(0)}px`;
+            const heightX = end.x + 25;
+            const heightY = start.y + height / 2;
+            ctx.strokeText(heightText, heightX, heightY);
+            ctx.fillText(heightText, heightX, heightY);
         }
 
         function calculateMeasurement(point1, point2) {
@@ -1383,7 +1417,7 @@
                 y: point2.y * scaleY
             };
             
-            fetch('/api/measure', {
+            fetch('/api/measure_rectangle', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -1411,28 +1445,62 @@
             
             let displayText = '';
             if (isMetric) {
-                if (measurement.cm_distance > 100) {
-                    displayText = `<strong>${(measurement.cm_distance / 100).toFixed(2)} m</strong>`;
-                } else {
-                    displayText = `<strong>${measurement.mm_distance.toFixed(1)} mm</strong>`;
-                }
-                displayText += `<br><span style="color: #64748b;">Alternative: ${measurement.inch_distance.toFixed(2)} inches</span>`;
+                // Width
+                const widthText = measurement.width_cm > 100 ? 
+                    `${(measurement.width_cm / 100).toFixed(2)} m` : 
+                    `${measurement.width_mm.toFixed(1)} mm`;
+                
+                // Height  
+                const heightText = measurement.height_cm > 100 ? 
+                    `${(measurement.height_cm / 100).toFixed(2)} m` : 
+                    `${measurement.height_mm.toFixed(1)} mm`;
+                
+                // Area
+                const areaText = measurement.area_cm2 > 10000 ? 
+                    `${(measurement.area_cm2 / 10000).toFixed(2)} m²` : 
+                    `${measurement.area_cm2.toFixed(1)} cm²`;
+                
+                displayText = `<strong>Width:</strong> ${widthText}<br>`;
+                displayText += `<strong>Height:</strong> ${heightText}<br>`;
+                displayText += `<strong>Area:</strong> ${areaText}<br>`;
+                displayText += `<span style="color: #64748b;">Alt: ${measurement.width_in.toFixed(2)}" × ${measurement.height_in.toFixed(2)}" = ${measurement.area_sqft.toFixed(2)} ft²</span>`;
             } else {
-                if (measurement.inch_distance > 12) {
-                    displayText = `<strong>${(measurement.inch_distance / 12).toFixed(2)} ft</strong>`;
-                } else {
-                    displayText = `<strong>${measurement.inch_distance.toFixed(2)} in</strong>`;
-                }
-                displayText += `<br><span style="color: #64748b;">Alternative: ${measurement.cm_distance.toFixed(1)} cm</span>`;
+                // Width
+                const widthText = measurement.width_in > 12 ? 
+                    `${(measurement.width_in / 12).toFixed(2)} ft` : 
+                    `${measurement.width_in.toFixed(2)} in`;
+                
+                // Height
+                const heightText = measurement.height_in > 12 ? 
+                    `${(measurement.height_in / 12).toFixed(2)} ft` : 
+                    `${measurement.height_in.toFixed(2)} in`;
+                
+                // Area  
+                const areaText = measurement.area_sqft > 1 ? 
+                    `${measurement.area_sqft.toFixed(2)} ft²` : 
+                    `${measurement.area_sqin.toFixed(1)} in²`;
+                
+                displayText = `<strong>Width:</strong> ${widthText}<br>`;
+                displayText += `<strong>Height:</strong> ${heightText}<br>`;
+                displayText += `<strong>Area:</strong> ${areaText}<br>`;
+                displayText += `<span style="color: #64748b;">Alt: ${measurement.width_cm.toFixed(1)} × ${measurement.height_cm.toFixed(1)} cm = ${measurement.area_cm2.toFixed(1)} cm²</span>`;
             }
             
             valuesDiv.innerHTML = displayText;
             resultsDiv.style.display = 'block';
             
-            // Update overlay info
+            // Update overlay info (simplified)
             const overlayInfo = document.getElementById('measurementInfo');
             const overlayText = document.getElementById('measurementText');
-            overlayText.innerHTML = displayText.replace('<br>', ' / ');
+            if (isMetric) {
+                const w = measurement.width_cm > 100 ? `${(measurement.width_cm/100).toFixed(1)}m` : `${measurement.width_mm.toFixed(0)}mm`;
+                const h = measurement.height_cm > 100 ? `${(measurement.height_cm/100).toFixed(1)}m` : `${measurement.height_mm.toFixed(0)}mm`;
+                overlayText.innerHTML = `${w} × ${h}`;
+            } else {
+                const w = measurement.width_in > 12 ? `${(measurement.width_in/12).toFixed(1)}ft` : `${measurement.width_in.toFixed(1)}"`;
+                const h = measurement.height_in > 12 ? `${(measurement.height_in/12).toFixed(1)}ft` : `${measurement.height_in.toFixed(1)}"`;
+                overlayText.innerHTML = `${w} × ${h}`;
+            }
             overlayInfo.style.display = 'block';
         }
 

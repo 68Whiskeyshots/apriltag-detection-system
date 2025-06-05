@@ -563,6 +563,70 @@ def measure_distance():
             'message': f'Measurement error: {str(e)}'
         })
 
+@app.route('/api/measure_rectangle', methods=['POST'])
+def measure_rectangle():
+    """Use calibration to measure rectangle dimensions in pixels"""
+    try:
+        data = request.get_json()
+        if not os.path.exists('calibration/current_calibration.json'):
+            return jsonify({
+                'success': False,
+                'message': 'No calibration data available. Please calibrate camera first.'
+            })
+        
+        with open('calibration/current_calibration.json', 'r') as f:
+            calibration = json.load(f)
+        
+        pixels_per_inch = calibration['calibrated_pixels_per_inch']
+        
+        # Get rectangle corners
+        x1, y1 = data['point1']['x'], data['point1']['y']
+        x2, y2 = data['point2']['x'], data['point2']['y']
+        
+        # Calculate width and height in pixels
+        width_pixels = abs(x2 - x1)
+        height_pixels = abs(y2 - y1)
+        area_pixels = width_pixels * height_pixels
+        
+        # Convert to real world measurements
+        width_inches = width_pixels / pixels_per_inch
+        height_inches = height_pixels / pixels_per_inch
+        area_square_inches = area_pixels / (pixels_per_inch ** 2)
+        
+        # Convert to metric
+        width_mm = width_inches * 25.4
+        height_mm = height_inches * 25.4
+        width_cm = width_inches * 2.54
+        height_cm = height_inches * 2.54
+        area_cm2 = area_square_inches * 6.4516  # 1 sq inch = 6.4516 sq cm
+        
+        # Convert to feet for large measurements
+        area_sqft = area_square_inches / 144  # 144 sq inches = 1 sq ft
+        
+        return jsonify({
+            'success': True,
+            'measurement': {
+                'width_pixels': width_pixels,
+                'height_pixels': height_pixels,
+                'area_pixels': area_pixels,
+                'width_in': width_inches,
+                'height_in': height_inches,
+                'area_sqin': area_square_inches,
+                'area_sqft': area_sqft,
+                'width_mm': width_mm,
+                'height_mm': height_mm,
+                'width_cm': width_cm,
+                'height_cm': height_cm,
+                'area_cm2': area_cm2
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Rectangle measurement error: {str(e)}'
+        })
+
 if __name__ == '__main__':
     import argparse
     
