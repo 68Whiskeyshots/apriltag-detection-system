@@ -1,33 +1,42 @@
-# AprilTag Detection System - Comprehensive Technical Documentation
+# BANDIT Multi-Modal Detection System - Comprehensive Technical Documentation
+# Deep technical documentation covering architecture, algorithms, mathematical foundations, and implementation details.
+# Contains: System architecture, computer vision algorithms, pose estimation, object detection, web technologies, and performance optimization.
 
 ## Table of Contents
 1. [System Overview](#system-overview)
 2. [Architecture Deep Dive](#architecture-deep-dive)
-3. [Core Detection Engine - apriltag_detector.py](#core-detection-engine---apriltag_detectorpy)
-4. [Web Server Implementation - app.py](#web-server-implementation---apppy)
-5. [Frontend Interface - index.html](#frontend-interface---indexhtml)
-6. [Video Streaming and Display Projection](#video-streaming-and-display-projection)
-7. [Mathematical Foundations](#mathematical-foundations)
-8. [Data Flow and Communication](#data-flow-and-communication)
-9. [Performance Optimization](#performance-optimization)
-10. [Advanced Usage and Extensions](#advanced-usage-and-extensions)
+3. [AprilTag Detection Engine - apriltag_detector.py](#apriltag-detection-engine---apriltag_detectorpy)
+4. [Object Detection Engine - object_detector.py](#object-detection-engine---object_detectorpy)
+5. [Web Server Implementation - app.py](#web-server-implementation---apppy)
+6. [Frontend Interface - index.html](#frontend-interface---indexhtml)
+7. [Video Streaming and Display Projection](#video-streaming-and-display-projection)
+8. [Mathematical Foundations](#mathematical-foundations)
+9. [Data Flow and Communication](#data-flow-and-communication)
+10. [Performance Optimization](#performance-optimization)
+11. [Advanced Usage and Extensions](#advanced-usage-and-extensions)
 
 ## System Overview
 
-The AprilTag Detection System is a sophisticated computer vision application that performs real-time detection and 6DOF (six degrees of freedom) pose estimation of AprilTag fiducial markers. The system combines advanced computer vision algorithms with modern web technologies to provide an interactive, real-time visualization platform.
+The BANDIT Multi-Modal Detection System is a sophisticated computer vision application that combines AprilTag detection with AI-powered object detection. It performs real-time detection and 6DOF (six degrees of freedom) pose estimation of AprilTag fiducial markers while simultaneously running RF-DETR (Real-time Detection Transformer) for general object detection. The system integrates advanced computer vision algorithms with modern web technologies to provide an interactive, real-time visualization platform.
 
 ### Key Features:
 - **Real-time Detection**: Processes video streams at ~30 FPS
 - **6DOF Pose Estimation**: Calculates full position (X,Y,Z) and orientation (roll, pitch, yaw)
 - **Multi-Tag Support**: Detects multiple tags simultaneously from tag36h11 and tag25h9 families
+- **AI Object Detection**: RF-DETR integration with custom model weights
+- **Multi-Camera Support**: Camera discovery and real-time switching
+- **Professional Calibration**: Pixel-to-inches measurement system
 - **Web-Based Visualization**: Modern responsive interface with live video feed
-- **3D Overlay Graphics**: Renders coordinate axes on detected tags
+- **3D Overlay Graphics**: Renders coordinate axes on detected tags and object bounding boxes
 - **Dual Communication**: HTTP streaming for video, WebSocket for data
+- **Two-tier Control**: Independent control of detection enablement and ML inference
 
 ### Technology Stack:
 - **Backend**: Python 3.x, OpenCV, AprilTag library, Flask, Flask-SocketIO
+- **AI/ML**: PyTorch, Transformers (Hugging Face), RT-DETR, TorchVision
 - **Frontend**: HTML5, CSS3, JavaScript, Socket.IO client
 - **Computer Vision**: OpenCV for image processing, AprilTag for detection
+- **Object Detection**: RF-DETR (Real-time Detection Transformer)
 - **Networking**: EventLet for asynchronous operations, WebSocket for real-time data
 
 ## Architecture Deep Dive
@@ -204,6 +213,259 @@ def draw_pose(self, image, tag_data):
 ```
 
 The color coding follows the RGB-XYZ convention for intuitive 3D visualization.
+
+## Object Detection Engine - object_detector.py
+
+The object detection engine provides AI-powered object detection using Real-time Detection Transformer (RF-DETR) architecture. It integrates seamlessly with the AprilTag detection pipeline to provide comprehensive scene understanding.
+
+### Class Structure: RFDETRObjectDetector
+
+```python
+class RFDETRObjectDetector:
+    def __init__(self, weights_path="models/rf_detr_custom.pth", 
+                 config_path="models/rf_detr_config.json", 
+                 device="auto"):
+```
+
+#### Initialization Parameters:
+- **weights_path**: Path to custom trained .pth model weights
+- **config_path**: Path to JSON configuration file with class names and parameters
+- **device**: Computation device ("auto", "cuda", "cpu")
+
+#### Model Architecture
+The system supports RT-DETR (Real-time Detection Transformer) models with the following specifications:
+
+```python
+# Expected model output format
+{
+    'logits': torch.Tensor,      # [batch, num_queries, num_classes]
+    'pred_boxes': torch.Tensor   # [batch, num_queries, 4] (normalized coordinates)
+}
+```
+
+### Detection Pipeline
+
+#### 1. Model Loading and Initialization
+```python
+def load_model(self):
+    try:
+        # Load configuration
+        with open(self.config_path, 'r') as f:
+            self.config = json.load(f)
+        
+        # Initialize model with proper number of classes
+        num_classes = len(self.config['class_names'])
+        
+        # Load state dict with error handling
+        state_dict = torch.load(self.weights_path, map_location=self.device)
+        self.model.load_state_dict(state_dict)
+        
+        # Set evaluation mode
+        self.model.eval()
+        
+        self.model_loaded = True
+        
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        self.model_loaded = False
+```
+
+#### 2. Image Preprocessing
+```python
+def preprocess_image(self, image):
+    # Resize to model input size
+    input_size = self.config.get('input_size', [640, 640])
+    resized = cv2.resize(image, tuple(input_size))
+    
+    # Convert BGR to RGB
+    rgb_image = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    
+    # Normalize to [0,1] and convert to tensor
+    tensor_image = torch.from_numpy(rgb_image).float() / 255.0
+    tensor_image = tensor_image.permute(2, 0, 1).unsqueeze(0)  # [1, 3, H, W]
+    
+    return tensor_image.to(self.device)
+```
+
+#### 3. Inference and Post-processing
+```python
+def detect_objects(self, image):
+    if not self.is_available() or not self.ml_inference_running:
+        return []
+    
+    with torch.no_grad():
+        # Preprocess
+        tensor_image = self.preprocess_image(image)
+        
+        # Forward pass
+        outputs = self.model(tensor_image)
+        
+        # Extract predictions
+        logits = outputs['logits'][0]  # [num_queries, num_classes]
+        boxes = outputs['pred_boxes'][0]  # [num_queries, 4]
+        
+        # Apply confidence threshold
+        confidences = torch.softmax(logits, dim=-1)
+        max_confidences, predicted_classes = torch.max(confidences, dim=-1)
+        
+        # Filter by confidence threshold
+        conf_threshold = self.config.get('confidence_threshold', 0.5)
+        valid_detections = max_confidences > conf_threshold
+        
+        # Convert to detection format
+        detections = []
+        for i, is_valid in enumerate(valid_detections):
+            if is_valid:
+                class_id = predicted_classes[i].item()
+                confidence = max_confidences[i].item()
+                box = boxes[i].cpu().numpy()
+                
+                # Convert normalized coordinates to pixel coordinates
+                h, w = image.shape[:2]
+                x1, y1, x2, y2 = box * np.array([w, h, w, h])
+                
+                detection = {
+                    'class_id': class_id,
+                    'class_name': self.class_names[class_id],
+                    'confidence': confidence,
+                    'bbox': [int(x1), int(y1), int(x2), int(y2)]
+                }
+                detections.append(detection)
+        
+        return detections
+```
+
+#### 4. Non-Maximum Suppression (NMS)
+```python
+def apply_nms(self, detections):
+    if len(detections) == 0:
+        return detections
+    
+    boxes = np.array([det['bbox'] for det in detections])
+    scores = np.array([det['confidence'] for det in detections])
+    
+    # Apply NMS using OpenCV
+    nms_threshold = self.config.get('nms_threshold', 0.4)
+    indices = cv2.dnn.NMSBoxes(
+        boxes.tolist(), 
+        scores.tolist(), 
+        self.config.get('confidence_threshold', 0.5),
+        nms_threshold
+    )
+    
+    if len(indices) > 0:
+        return [detections[i] for i in indices.flatten()]
+    return []
+```
+
+### Visualization and Overlay
+
+#### Object Bounding Box Rendering
+```python
+def draw_detections(self, image, detections):
+    for detection in detections:
+        x1, y1, x2, y2 = detection['bbox']
+        class_name = detection['class_name']
+        confidence = detection['confidence']
+        
+        # Draw bounding box
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 255), 2)
+        
+        # Draw label with confidence
+        label = f"{class_name}: {confidence:.2f}"
+        label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+        
+        # Background for label
+        cv2.rectangle(image, (x1, y1 - label_size[1] - 10), 
+                     (x1 + label_size[0], y1), (0, 255, 255), -1)
+        
+        # Text label
+        cv2.putText(image, label, (x1, y1 - 5), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+    
+    return image
+```
+
+### Configuration Management
+
+#### JSON Configuration Format
+```json
+{
+  "model_name": "Custom RF-DETR",
+  "class_names": ["person", "car", "bicycle", "..."],
+  "confidence_threshold": 0.5,
+  "nms_threshold": 0.4,
+  "input_size": [640, 640],
+  "model_info": {
+    "architecture": "RT-DETR",
+    "num_classes": 80,
+    "num_queries": 300
+  }
+}
+```
+
+#### Dynamic Configuration Updates
+```python
+def update_config(self, new_config):
+    # Update detection parameters
+    if 'confidence_threshold' in new_config:
+        self.config['confidence_threshold'] = new_config['confidence_threshold']
+    
+    if 'nms_threshold' in new_config:
+        self.config['nms_threshold'] = new_config['nms_threshold']
+    
+    # Save updated configuration
+    with open(self.config_path, 'w') as f:
+        json.dump(self.config, f, indent=2)
+```
+
+### Two-Tier Control System
+
+The object detection system implements a two-tier control mechanism for resource management:
+
+#### Tier 1: Detection Enablement
+```python
+self.object_detection_enabled = False  # Master switch for object detection
+```
+
+#### Tier 2: ML Inference Control
+```python
+self.ml_inference_running = False  # Controls actual inference execution
+```
+
+This design allows users to:
+1. Enable object detection (loads model, prepares system)
+2. Start/stop inference independently (controls computation)
+
+### Performance Optimizations
+
+#### GPU Memory Management
+```python
+def cleanup_gpu_memory(self):
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+```
+
+#### Batch Processing Support
+```python
+def detect_batch(self, images):
+    batch_tensor = torch.stack([self.preprocess_image(img) for img in images])
+    
+    with torch.no_grad():
+        outputs = self.model(batch_tensor)
+        
+    return self.process_batch_outputs(outputs)
+```
+
+#### Model Quantization Support
+```python
+def quantize_model(self):
+    if self.device == 'cpu':
+        self.model = torch.quantization.quantize_dynamic(
+            self.model, {torch.nn.Linear}, dtype=torch.qint8
+        )
+```
 
 ## Web Server Implementation - app.py
 

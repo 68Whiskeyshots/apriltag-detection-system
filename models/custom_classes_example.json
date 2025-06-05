@@ -1,0 +1,64 @@
+{
+  "_comment": "Example configuration for custom object classes",
+  "_description": "This file shows how to configure BANDIT for custom trained models",
+  
+  "model_name": "Custom Industrial Objects RF-DETR",
+  "description": "RF-DETR model trained on industrial equipment and safety objects",
+  "version": "1.0.0",
+  
+  "class_names": [
+    "hard_hat",
+    "safety_vest",
+    "forklift",
+    "pallet",
+    "fire_extinguisher",
+    "warning_sign",
+    "conveyor_belt",
+    "machinery",
+    "worker",
+    "cargo_container"
+  ],
+  
+  "confidence_threshold": 0.6,
+  "nms_threshold": 0.4,
+  "input_size": [640, 640],
+  
+  "model_info": {
+    "architecture": "RT-DETR",
+    "backbone": "ResNet-50",
+    "num_queries": 300,
+    "num_classes": 10,
+    "training_dataset": "Custom Industrial Dataset",
+    "training_images": 15000,
+    "validation_accuracy": 0.87,
+    "mean_ap": 0.82
+  },
+  
+  "class_colors": {
+    "hard_hat": [255, 255, 0],
+    "safety_vest": [255, 165, 0], 
+    "forklift": [255, 0, 0],
+    "pallet": [139, 69, 19],
+    "fire_extinguisher": [255, 0, 0],
+    "warning_sign": [255, 255, 0],
+    "conveyor_belt": [128, 128, 128],
+    "machinery": [0, 0, 255],
+    "worker": [0, 255, 0],
+    "cargo_container": [128, 0, 128]
+  },
+  
+  "inference_settings": {
+    "batch_size": 1,
+    "device": "auto",
+    "precision": "fp16",
+    "warmup_iterations": 5
+  },
+  
+  "deployment_info": {
+    "use_case": "Industrial safety monitoring",
+    "environment": "Factory floor, warehouse",
+    "lighting_conditions": "Variable industrial lighting",
+    "camera_height": "3-5 meters",
+    "coverage_area": "50x50 meters typical"
+  }
+}

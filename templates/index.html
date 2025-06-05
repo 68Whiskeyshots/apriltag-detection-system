@@ -434,6 +434,56 @@
             font-weight: 500;
         }
         
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #cbd5e1;
+            transition: .3s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #3b82f6;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        .detection-controls input[type="range"] {
+            width: 100%;
+            margin: 4px 0;
+        }
+        
         @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -528,6 +578,65 @@
                     </div>
                 </div>
                 
+                <div class="collapsible-panel">
+                    <div class="panel-header collapsed" onclick="togglePanel('objectDetection')">
+                        <span class="panel-title">Object Detection</span>
+                        <svg class="panel-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </div>
+                    <div class="panel-content" id="objectDetection">
+                        <div class="detection-controls">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                                <span style="font-weight: 500;">Enable Object Detection</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="objectDetectionToggle" onchange="toggleObjectDetection()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            
+                            <div id="objectDetectionConfig" style="display: none;">
+                                <div style="margin-bottom: 16px;">
+                                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                                        <button class="btn btn-small primary" id="startInferenceBtn" onclick="startMLInference()" style="flex: 1;">
+                                            Start Inference
+                                        </button>
+                                        <button class="btn btn-small" id="stopInferenceBtn" onclick="stopMLInference()" style="flex: 1; display: none;">
+                                            Stop Inference
+                                        </button>
+                                    </div>
+                                    <div id="inferenceStatus" style="text-align: center; font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                        Ready to start ML inference
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px;">
+                                    <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #374151;">Confidence Threshold</label>
+                                    <input type="range" id="confidenceSlider" min="0.1" max="1.0" step="0.05" value="0.5" oninput="updateConfidence(this.value)">
+                                    <span id="confidenceValue" style="font-size: 12px; color: #64748b;">0.5</span>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px;">
+                                    <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #374151;">NMS Threshold</label>
+                                    <input type="range" id="nmsSlider" min="0.1" max="0.9" step="0.05" value="0.4" oninput="updateNMS(this.value)">
+                                    <span id="nmsValue" style="font-size: 12px; color: #64748b;">0.4</span>
+                                </div>
+                                
+                                <button class="btn btn-small primary" onclick="applyDetectionConfig()" style="width: 100%;">
+                                    Apply Settings
+                                </button>
+                            </div>
+                            
+                            <div id="objectDetectionStatus" style="margin-top: 12px;">
+                                <div style="font-size: 12px; color: #64748b;">
+                                    <div>Status: <span id="detectionStatusText">Loading...</span></div>
+                                    <div>Model: <span id="detectionModelText">RF-DETR</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="info-panel">
                     <h3>Detection Statistics</h3>
                     <div class="stats-grid">
@@ -536,8 +645,16 @@
                             <div class="stat-label">Tags Detected</div>
                         </div>
                         <div class="stat-card">
+                            <span class="stat-value" id="objectCount">0</span>
+                            <div class="stat-label">Objects Detected</div>
+                        </div>
+                        <div class="stat-card">
                             <span class="stat-value" id="avgDistance">--</span>
                             <div class="stat-label">Avg Distance (m)</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-value" id="avgConfidence">--</span>
+                            <div class="stat-label">Avg Confidence</div>
                         </div>
                     </div>
                 </div>
@@ -546,6 +663,13 @@
                     <h3>Detected Tags</h3>
                     <div class="tag-list" id="tagList">
                         <p style="text-align: center; color: #64748b; margin: 20px 0;">No tags detected</p>
+                    </div>
+                </div>
+                
+                <div class="info-panel">
+                    <h3>Detected Objects</h3>
+                    <div class="tag-list" id="objectList">
+                        <p style="text-align: center; color: #64748b; margin: 20px 0;">No objects detected</p>
                     </div>
                 </div>
                 
@@ -585,8 +709,8 @@
             if (data.image) {
                 updateVideoFeed(data.image);
             }
-            if (data.tags) {
-                updateTagInfo(data.tags);
+            if (data.tags || data.objects) {
+                updateTagInfo(data.tags || [], data.objects || []);
             }
             updateFPS();
         });
@@ -614,35 +738,77 @@
             }
         });
 
+        socket.on('object_detection_toggle_result', function(data) {
+            if (data.success) {
+                showNotification('Object Detection', data.message, 'success');
+                updateObjectDetectionStatus(data);
+            } else {
+                showNotification('Object Detection Error', data.message, 'error');
+            }
+        });
+
+        socket.on('ml_inference_result', function(data) {
+            if (data.success) {
+                showNotification('ML Inference', data.message, 'success');
+                updateInferenceButtons(data.running);
+                updateInferenceStatus(data.running);
+            } else {
+                showNotification('ML Inference Error', data.message, 'error');
+                updateInferenceButtons(false);
+                updateInferenceStatus(false, data.message);
+            }
+        });
+
         function updateVideoFeed(imageData) {
             // The video feed is handled by the /video_feed route
             // This function could be used for WebSocket-based streaming if needed
         }
 
-        function updateTagInfo(tags) {
+        function updateTagInfo(tags = [], objects = []) {
             const tagCount = document.getElementById('tagCount');
+            const objectCount = document.getElementById('objectCount');
             const tagList = document.getElementById('tagList');
+            const objectList = document.getElementById('objectList');
             const avgDistance = document.getElementById('avgDistance');
+            const avgConfidence = document.getElementById('avgConfidence');
 
+            // Update tag statistics
             tagCount.textContent = tags.length;
+            objectCount.textContent = objects.length;
 
             if (tags.length === 0) {
-                tagList.innerHTML = '<p style="text-align: center; color: #b8c6db; margin: 20px 0;">No tags detected</p>';
+                tagList.innerHTML = '<p style="text-align: center; color: #64748b; margin: 20px 0;">No tags detected</p>';
                 avgDistance.textContent = '--';
-                return;
+            } else {
+                // Calculate average distance
+                const totalDistance = tags.reduce((sum, tag) => sum + tag.distance, 0);
+                const average = totalDistance / tags.length;
+                avgDistance.textContent = average.toFixed(3);
+
+                // Update tag list
+                tagList.innerHTML = '';
+                tags.forEach(tag => {
+                    const tagElement = createTagElement(tag);
+                    tagList.appendChild(tagElement);
+                });
             }
 
-            // Calculate average distance
-            const totalDistance = tags.reduce((sum, tag) => sum + tag.distance, 0);
-            const average = totalDistance / tags.length;
-            avgDistance.textContent = average.toFixed(3);
+            if (objects.length === 0) {
+                objectList.innerHTML = '<p style="text-align: center; color: #64748b; margin: 20px 0;">No objects detected</p>';
+                if (avgConfidence) avgConfidence.textContent = '--';
+            } else {
+                // Calculate average confidence
+                const totalConfidence = objects.reduce((sum, obj) => sum + obj.confidence, 0);
+                const averageConf = totalConfidence / objects.length;
+                if (avgConfidence) avgConfidence.textContent = averageConf.toFixed(3);
 
-            // Update tag list
-            tagList.innerHTML = '';
-            tags.forEach(tag => {
-                const tagElement = createTagElement(tag);
-                tagList.appendChild(tagElement);
-            });
+                // Update object list
+                objectList.innerHTML = '';
+                objects.forEach(obj => {
+                    const objectElement = createObjectElement(obj);
+                    objectList.appendChild(objectElement);
+                });
+            }
         }
 
         function createTagElement(tag) {
@@ -771,6 +937,196 @@
                 .catch(error => console.log('No previous calibration found'));
         }
 
+        function createObjectElement(obj) {
+            const div = document.createElement('div');
+            div.className = 'tag-item';
+            
+            div.innerHTML = `
+                <div class="tag-id">${obj.class_name} (${obj.confidence.toFixed(3)})</div>
+                <div class="tag-info">
+                    <span><strong>Class:</strong> ${obj.class_name}</span>
+                    <span><strong>Confidence:</strong> ${obj.confidence.toFixed(3)}</span>
+                    <span><strong>Center:</strong> (${Math.round(obj.center[0])}, ${Math.round(obj.center[1])})</span>
+                    <span><strong>Size:</strong> ${Math.round(obj.width)}×${Math.round(obj.height)}</span>
+                    <span><strong>X1:</strong> ${Math.round(obj.bbox[0])}</span>
+                    <span><strong>Y1:</strong> ${Math.round(obj.bbox[1])}</span>
+                    <span><strong>X2:</strong> ${Math.round(obj.bbox[2])}</span>
+                    <span><strong>Y2:</strong> ${Math.round(obj.bbox[3])}</span>
+                </div>
+                <div class="coordinates">
+                    BBox: [${obj.bbox.map(v => Math.round(v)).join(', ')}]<br>
+                    Center: [${Math.round(obj.center[0])}, ${Math.round(obj.center[1])}]<br>
+                    Size: ${Math.round(obj.width)} × ${Math.round(obj.height)} px
+                </div>
+            `;
+            
+            return div;
+        }
+
+        // Object Detection Controls
+        function toggleObjectDetection() {
+            const toggle = document.getElementById('objectDetectionToggle');
+            const config = document.getElementById('objectDetectionConfig');
+            
+            if (toggle.checked) {
+                config.style.display = 'block';
+            } else {
+                config.style.display = 'none';
+            }
+            
+            socket.emit('toggle_object_detection', {enabled: toggle.checked});
+        }
+
+        function updateConfidence(value) {
+            document.getElementById('confidenceValue').textContent = value;
+        }
+
+        function updateNMS(value) {
+            document.getElementById('nmsValue').textContent = value;
+        }
+
+        function applyDetectionConfig() {
+            const confidence = parseFloat(document.getElementById('confidenceSlider').value);
+            const nms = parseFloat(document.getElementById('nmsSlider').value);
+            
+            fetch('/api/object_detection/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    confidence_threshold: confidence,
+                    nms_threshold: nms
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Settings Updated', data.message, 'success');
+                } else {
+                    showNotification('Update Failed', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Update Failed', 'Network error', 'error');
+            });
+        }
+
+        function loadObjectDetectionStatus() {
+            fetch('/api/object_detection/status')
+                .then(response => response.json())
+                .then(data => {
+                    updateObjectDetectionUI(data);
+                })
+                .catch(error => console.log('Failed to load object detection status'));
+        }
+
+        function updateObjectDetectionUI(data) {
+            const toggle = document.getElementById('objectDetectionToggle');
+            const statusText = document.getElementById('detectionStatusText');
+            const confidenceSlider = document.getElementById('confidenceSlider');
+            const nmsSlider = document.getElementById('nmsSlider');
+            const confidenceValue = document.getElementById('confidenceValue');
+            const nmsValue = document.getElementById('nmsValue');
+            
+            if (data.available) {
+                statusText.textContent = data.enabled ? 'Enabled' : 'Available';
+                statusText.style.color = data.enabled ? '#22c55e' : '#64748b';
+                toggle.checked = data.enabled;
+                
+                if (data.enabled) {
+                    document.getElementById('objectDetectionConfig').style.display = 'block';
+                    
+                    // Update inference button state
+                    updateInferenceButtons(data.inference_running || false);
+                    updateInferenceStatus(data.inference_running || false);
+                }
+                
+                confidenceSlider.value = data.confidence_threshold;
+                nmsSlider.value = data.nms_threshold;
+                confidenceValue.textContent = data.confidence_threshold;
+                nmsValue.textContent = data.nms_threshold;
+            } else {
+                statusText.textContent = 'Not Available';
+                statusText.style.color = '#ef4444';
+                toggle.disabled = true;
+                
+                // Disable inference controls if model not available
+                updateInferenceButtons(false);
+                updateInferenceStatus(false, 'Model not available');
+            }
+        }
+
+        function updateObjectDetectionStatus(data) {
+            const statusText = document.getElementById('detectionStatusText');
+            if (data.enabled) {
+                statusText.textContent = 'Enabled';
+                statusText.style.color = '#22c55e';
+                document.getElementById('objectDetectionConfig').style.display = 'block';
+                
+                // Update inference buttons based on current state
+                if (data.inference_running !== undefined) {
+                    updateInferenceButtons(data.inference_running);
+                    updateInferenceStatus(data.inference_running);
+                }
+            } else {
+                statusText.textContent = data.available ? 'Available' : 'Not Available';
+                statusText.style.color = data.available ? '#64748b' : '#ef4444';
+                document.getElementById('objectDetectionConfig').style.display = 'none';
+                
+                // Reset inference state when object detection is disabled
+                updateInferenceButtons(false);
+                updateInferenceStatus(false);
+            }
+        }
+
+        // ML Inference Control Functions
+        function startMLInference() {
+            const startBtn = document.getElementById('startInferenceBtn');
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting...';
+            
+            socket.emit('start_ml_inference');
+        }
+
+        function stopMLInference() {
+            const stopBtn = document.getElementById('stopInferenceBtn');
+            stopBtn.disabled = true;
+            stopBtn.textContent = 'Stopping...';
+            
+            socket.emit('stop_ml_inference');
+        }
+
+        function updateInferenceButtons(running) {
+            const startBtn = document.getElementById('startInferenceBtn');
+            const stopBtn = document.getElementById('stopInferenceBtn');
+            
+            if (running) {
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                stopBtn.disabled = false;
+                stopBtn.textContent = 'Stop Inference';
+            } else {
+                startBtn.style.display = 'block';
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Inference';
+                stopBtn.style.display = 'none';
+            }
+        }
+
+        function updateInferenceStatus(running, errorMessage = null) {
+            const statusDiv = document.getElementById('inferenceStatus');
+            
+            if (errorMessage) {
+                statusDiv.textContent = errorMessage;
+                statusDiv.style.color = '#ef4444';
+            } else if (running) {
+                statusDiv.textContent = 'ML inference running...';
+                statusDiv.style.color = '#22c55e';
+            } else {
+                statusDiv.textContent = 'Ready to start ML inference';
+                statusDiv.style.color = '#64748b';
+            }
+        }
+
         // Panel toggle functionality
         function togglePanel(panelId) {
             const header = document.querySelector(`[onclick="togglePanel('${panelId}')"]`);
@@ -876,6 +1232,7 @@
         window.addEventListener('load', () => {
             setTimeout(startDetection, 1000);
             loadCurrentCalibration();
+            loadObjectDetectionStatus();
         });
     </script>
 </body>

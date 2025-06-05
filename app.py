@@ -7,6 +7,7 @@ import cv2
 import json
 import numpy as np
 from apriltag_detector import AprilTagDetector
+from object_detector import RFDETRObjectDetector, setup_model_directory
 import base64
 import os
 from datetime import datetime
@@ -19,8 +20,11 @@ class VideoCamera:
     def __init__(self, source=0):
         self.camera = None
         self.detector = AprilTagDetector()
+        self.object_detector = RFDETRObjectDetector()
         self.source = source
         self.is_video_file = isinstance(source, str)
+        self.object_detection_enabled = False  # Default disabled
+        self.ml_inference_running = False  # Separate flag for ML inference
         self.initialize_camera()
         
     def initialize_camera(self):
@@ -111,7 +115,8 @@ class VideoCamera:
     
     def get_frame(self):
         if not self.camera or not self.camera.isOpened():
-            return self.get_dummy_frame()
+            dummy_frame, dummy_tags = self.get_dummy_frame()
+            return dummy_frame, dummy_tags, []
             
         success, frame = self.camera.read()
         if not success:
@@ -120,9 +125,11 @@ class VideoCamera:
                 self.camera.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 success, frame = self.camera.read()
                 if not success:
-                    return self.get_dummy_frame()
+                    dummy_frame, dummy_tags = self.get_dummy_frame()
+                    return dummy_frame, dummy_tags, []
             else:
-                return self.get_dummy_frame()
+                dummy_frame, dummy_tags = self.get_dummy_frame()
+                return dummy_frame, dummy_tags, []
             
         # Detect AprilTags
         detected_tags = self.detector.detect_tags(frame)
@@ -130,6 +137,13 @@ class VideoCamera:
         # Draw pose estimation on frame
         for tag in detected_tags:
             frame = self.detector.draw_pose(frame, tag)
+        
+        # Object detection (if enabled and inference is running)
+        detected_objects = []
+        if self.object_detection_enabled and self.ml_inference_running and self.object_detector.is_available():
+            detected_objects = self.object_detector.detect_objects(frame)
+            # Draw object detections
+            frame = self.object_detector.draw_detections(frame, detected_objects)
         
         # Encode frame as JPEG
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -139,7 +153,7 @@ class VideoCamera:
         # Convert to base64 for web transmission
         frame_base64 = base64.b64encode(buffer).decode('utf-8')
         
-        return frame_base64, detected_tags
+        return frame_base64, detected_tags, detected_objects
 
 # Global camera instance - initialized when first accessed
 camera = None
@@ -159,7 +173,7 @@ def index():
 def get_tags():
     """API endpoint to get current tag detection data"""
     cam = get_camera()
-    frame_data, tags = cam.get_frame()
+    frame_data, tags, objects = cam.get_frame()
     if tags is None:
         return jsonify({'error': 'No camera data'}), 500
     
@@ -186,13 +200,32 @@ def get_tags():
         }
         serializable_tags.append(serializable_tag)
     
-    return jsonify({'tags': serializable_tags})
+    # Convert objects for JSON serialization
+    serializable_objects = []
+    for obj in objects:
+        serializable_obj = {
+            'class_id': obj['class_id'],
+            'class_name': obj['class_name'],
+            'confidence': obj['confidence'],
+            'bbox': obj['bbox'],
+            'center': obj['center'],
+            'width': obj['width'],
+            'height': obj['height']
+        }
+        serializable_objects.append(serializable_obj)
+    
+    return jsonify({
+        'tags': serializable_tags,
+        'objects': serializable_objects,
+        'object_detection_enabled': cam.object_detection_enabled,
+        'ml_inference_running': cam.ml_inference_running
+    })
 
 def generate_frames():
     """Generator function for video streaming"""
     cam = get_camera()
     while True:
-        frame_data, tags = cam.get_frame()
+        frame_data, tags, objects = cam.get_frame()
         if frame_data is not None:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + base64.b64decode(frame_data) + b'\r\n')
@@ -217,7 +250,7 @@ def handle_disconnect():
 def handle_get_frame():
     """Send frame and tag data via WebSocket"""
     cam = get_camera()
-    frame_data, tags = cam.get_frame()
+    frame_data, tags, objects = cam.get_frame()
     if frame_data is not None and tags is not None:
         # Convert numpy arrays to lists for JSON serialization
         serializable_tags = []
@@ -242,16 +275,33 @@ def handle_get_frame():
             }
             serializable_tags.append(serializable_tag)
         
+        # Convert objects for JSON serialization
+        serializable_objects = []
+        for obj in objects:
+            serializable_obj = {
+                'class_id': obj['class_id'],
+                'class_name': obj['class_name'],
+                'confidence': obj['confidence'],
+                'bbox': obj['bbox'],
+                'center': obj['center'],
+                'width': obj['width'],
+                'height': obj['height']
+            }
+            serializable_objects.append(serializable_obj)
+        
         emit('frame_data', {
             'image': frame_data,
-            'tags': serializable_tags
+            'tags': serializable_tags,
+            'objects': serializable_objects,
+            'object_detection_enabled': cam.object_detection_enabled,
+            'ml_inference_running': cam.ml_inference_running
         })
 
 @socketio.on('calibrate_camera')
 def handle_calibrate_camera():
     """Calibrate camera using current AprilTag detections and save calibration data"""
     cam = get_camera()
-    frame_data, tags = cam.get_frame()
+    frame_data, tags, objects = cam.get_frame()
     
     if not tags or len(tags) == 0:
         emit('calibration_result', {
@@ -385,6 +435,110 @@ def handle_switch_camera(data):
             'message': f'Failed to switch camera: {str(e)}'
         })
 
+@socketio.on('toggle_object_detection')
+def handle_toggle_object_detection(data):
+    """Toggle object detection on/off"""
+    global camera
+    if camera:
+        enabled = data.get('enabled', False)
+        camera.object_detection_enabled = enabled
+        
+        # If disabling object detection, also stop inference
+        if not enabled:
+            camera.ml_inference_running = False
+        
+        emit('object_detection_toggle_result', {
+            'success': True,
+            'enabled': enabled,
+            'available': camera.object_detector.is_available(),
+            'inference_running': camera.ml_inference_running,
+            'message': f"Object detection {'enabled' if enabled else 'disabled'}"
+        })
+    else:
+        emit('object_detection_toggle_result', {
+            'success': False,
+            'message': 'No camera available'
+        })
+
+@socketio.on('start_ml_inference')
+def handle_start_ml_inference():
+    """Start ML inference"""
+    global camera
+    if camera and camera.object_detection_enabled:
+        if camera.object_detector.is_available():
+            camera.ml_inference_running = True
+            emit('ml_inference_result', {
+                'success': True,
+                'running': True,
+                'message': 'ML inference started'
+            })
+        else:
+            emit('ml_inference_result', {
+                'success': False,
+                'running': False,
+                'message': 'ML model not available. Please check model weights.'
+            })
+    else:
+        emit('ml_inference_result', {
+            'success': False,
+            'running': False,
+            'message': 'Object detection must be enabled first'
+        })
+
+@socketio.on('stop_ml_inference')
+def handle_stop_ml_inference():
+    """Stop ML inference"""
+    global camera
+    if camera:
+        camera.ml_inference_running = False
+        emit('ml_inference_result', {
+            'success': True,
+            'running': False,
+            'message': 'ML inference stopped'
+        })
+    else:
+        emit('ml_inference_result', {
+            'success': False,
+            'message': 'No camera available'
+        })
+
+@app.route('/api/object_detection/status')
+def get_object_detection_status():
+    """Get object detection status and capabilities"""
+    cam = get_camera()
+    return jsonify({
+        'available': cam.object_detector.is_available(),
+        'enabled': cam.object_detection_enabled,
+        'inference_running': cam.ml_inference_running,
+        'class_names': cam.object_detector.get_class_names(),
+        'confidence_threshold': cam.object_detector.confidence_threshold,
+        'nms_threshold': cam.object_detector.nms_threshold
+    })
+
+@app.route('/api/object_detection/config', methods=['POST'])
+def update_object_detection_config():
+    """Update object detection configuration"""
+    cam = get_camera()
+    data = request.get_json()
+    
+    try:
+        confidence = data.get('confidence_threshold')
+        nms = data.get('nms_threshold')
+        
+        cam.object_detector.update_thresholds(confidence, nms)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuration updated successfully',
+            'confidence_threshold': cam.object_detector.confidence_threshold,
+            'nms_threshold': cam.object_detector.nms_threshold
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to update configuration: {str(e)}'
+        })
+
 @app.route('/api/calibration')
 def get_current_calibration():
     """Get the current camera calibration data"""
@@ -448,6 +602,9 @@ def measure_distance():
 
 if __name__ == '__main__':
     import argparse
+    
+    # Setup model directory on startup
+    setup_model_directory()
     
     parser = argparse.ArgumentParser(description='AprilTag Detection Server')
     parser.add_argument('--source', type=str, default=0,

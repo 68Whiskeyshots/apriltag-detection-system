@@ -1,0 +1,41 @@
+{
+  "model_name": "Shipping Pallet Detector",
+  "description": "Custom trained RF-DETR model for shipping pallet detection",
+  "version": "1.0.0",
+  "input_size": [640, 640],
+  "confidence_threshold": 0.7,
+  "nms_threshold": 0.3,
+  "max_detections": 50,
+  "class_names": [
+    "shipping_pallet"
+  ],
+  "model_info": {
+    "architecture": "RT-DETR",
+    "backbone": "ResNet-50",
+    "num_queries": 300,
+    "num_classes": 2,
+    "training_dataset": "Custom Shipping Pallet Dataset",
+    "input_format": "RGB",
+    "normalization": {
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225]
+    }
+  },
+  "inference_settings": {
+    "batch_size": 1,
+    "device": "auto",
+    "precision": "fp32",
+    "warmup_iterations": 3
+  },
+  "metadata": {
+    "created_by": "Dark Matter Labs",
+    "creation_date": "2024-06-05",
+    "framework": "PyTorch",
+    "framework_version": "2.0+",
+    "transformers_version": "4.30+",
+    "compatible_with": "BANDIT v2.1.0+",
+    "use_case": "Warehouse and logistics pallet detection",
+    "environment": "Indoor/outdoor mixed environments",
+    "notes": "Optimized for fewer false positives in prototype testing"
+  }
+}

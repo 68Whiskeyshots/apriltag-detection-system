@@ -152,4 +152,4 @@ Thumbs.db
 *.mov
 *.mkv
 calibration_data/
-test_videos/
+test_videos/models/rf_detr_custom.pth

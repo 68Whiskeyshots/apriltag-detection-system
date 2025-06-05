@@ -1,0 +1,5 @@
+# This file ensures the models directory is tracked by git
+# Place your rf_detr_custom.pth file here
+# 
+# Model files (.pth) are typically too large for git repositories
+# and should be stored using Git LFS or external storage
