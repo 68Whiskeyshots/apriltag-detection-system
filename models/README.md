@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains the RF-DETR object detection model configuration and weights for the BANDIT system. The system supports custom trained RT-DETR models with configurable class names and detection parameters.
+This directory contains the simplified object detection model configuration for the BANDIT system. The system validates model files and provides a clean interface for object detection integration.
 
 ## Required Files
 
@@ -196,11 +196,10 @@ python app.py --debug
 - **Toggle**: WebSocket `toggle_object_detection`
 - **Inference**: WebSocket `start_ml_inference`
 
-### Real-time Control
-1. **Enable Detection**: Toggle in web interface
-2. **Start Inference**: Click "Start Inference" button
-3. **Adjust Parameters**: Use confidence/NMS sliders
-4. **Monitor Performance**: Check FPS and detection counts
+### Simple Control
+1. **Enable Detection**: Single toggle in web interface
+2. **Adjust Parameters**: Use confidence/NMS sliders
+3. **Monitor Performance**: Check FPS and detection counts
 
 ### Example Usage
 ```python

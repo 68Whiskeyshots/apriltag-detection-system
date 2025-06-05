@@ -23,8 +23,7 @@ class VideoCamera:
         self.object_detector = RFDETRObjectDetector()
         self.source = source
         self.is_video_file = isinstance(source, str)
-        self.object_detection_enabled = False  # Default disabled
-        self.ml_inference_running = False  # Separate flag for ML inference
+        self.object_detection_enabled = False  # Single control flag
         self.initialize_camera()
         
     def initialize_camera(self):
@@ -138,9 +137,9 @@ class VideoCamera:
         for tag in detected_tags:
             frame = self.detector.draw_pose(frame, tag)
         
-        # Object detection (if enabled and inference is running)
+        # Object detection (if enabled)
         detected_objects = []
-        if self.object_detection_enabled and self.ml_inference_running and self.object_detector.is_available():
+        if self.object_detection_enabled and self.object_detector.is_available():
             detected_objects = self.object_detector.detect_objects(frame)
             # Draw object detections
             frame = self.object_detector.draw_detections(frame, detected_objects)
@@ -217,8 +216,7 @@ def get_tags():
     return jsonify({
         'tags': serializable_tags,
         'objects': serializable_objects,
-        'object_detection_enabled': cam.object_detection_enabled,
-        'ml_inference_running': cam.ml_inference_running
+        'object_detection_enabled': cam.object_detection_enabled
     })
 
 def generate_frames():
@@ -293,8 +291,7 @@ def handle_get_frame():
             'image': frame_data,
             'tags': serializable_tags,
             'objects': serializable_objects,
-            'object_detection_enabled': cam.object_detection_enabled,
-            'ml_inference_running': cam.ml_inference_running
+            'object_detection_enabled': cam.object_detection_enabled
         })
 
 @socketio.on('calibrate_camera')
@@ -441,63 +438,22 @@ def handle_toggle_object_detection(data):
     global camera
     if camera:
         enabled = data.get('enabled', False)
-        camera.object_detection_enabled = enabled
         
-        # If disabling object detection, also stop inference
-        if not enabled:
-            camera.ml_inference_running = False
+        if enabled:
+            camera.object_detector.enable()
+            camera.object_detection_enabled = True
+        else:
+            camera.object_detector.disable()
+            camera.object_detection_enabled = False
         
         emit('object_detection_toggle_result', {
             'success': True,
-            'enabled': enabled,
-            'available': camera.object_detector.is_available(),
-            'inference_running': camera.ml_inference_running,
+            'enabled': camera.object_detection_enabled,
+            'available': camera.object_detector.model is not None,
             'message': f"Object detection {'enabled' if enabled else 'disabled'}"
         })
     else:
         emit('object_detection_toggle_result', {
-            'success': False,
-            'message': 'No camera available'
-        })
-
-@socketio.on('start_ml_inference')
-def handle_start_ml_inference():
-    """Start ML inference"""
-    global camera
-    if camera and camera.object_detection_enabled:
-        if camera.object_detector.is_available():
-            camera.ml_inference_running = True
-            emit('ml_inference_result', {
-                'success': True,
-                'running': True,
-                'message': 'ML inference started'
-            })
-        else:
-            emit('ml_inference_result', {
-                'success': False,
-                'running': False,
-                'message': 'ML model not available. Please check model weights.'
-            })
-    else:
-        emit('ml_inference_result', {
-            'success': False,
-            'running': False,
-            'message': 'Object detection must be enabled first'
-        })
-
-@socketio.on('stop_ml_inference')
-def handle_stop_ml_inference():
-    """Stop ML inference"""
-    global camera
-    if camera:
-        camera.ml_inference_running = False
-        emit('ml_inference_result', {
-            'success': True,
-            'running': False,
-            'message': 'ML inference stopped'
-        })
-    else:
-        emit('ml_inference_result', {
             'success': False,
             'message': 'No camera available'
         })
@@ -507,9 +463,8 @@ def get_object_detection_status():
     """Get object detection status and capabilities"""
     cam = get_camera()
     return jsonify({
-        'available': cam.object_detector.is_available(),
+        'available': cam.object_detector.model is not None,
         'enabled': cam.object_detection_enabled,
-        'inference_running': cam.ml_inference_running,
         'class_names': cam.object_detector.get_class_names(),
         'confidence_threshold': cam.object_detector.confidence_threshold,
         'nms_threshold': cam.object_detector.nms_threshold
