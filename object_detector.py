@@ -231,11 +231,16 @@ class RFDETRObjectDetector:
                         if conf > self.confidence_threshold:
                             x1, y1, x2, y2 = box
                             
+                            # Convert all numpy values to Python native types for JSON serialization
+                            x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+                            conf = float(conf)
+                            cls = int(cls)
+                            
                             # Convert to our format
                             detection = {
-                                'class_id': int(cls),
-                                'class_name': self.class_names[min(int(cls), len(self.class_names) - 1)],
-                                'confidence': float(conf),
+                                'class_id': cls,
+                                'class_name': self.class_names[min(cls, len(self.class_names) - 1)],
+                                'confidence': conf,
                                 'bbox': [x1, y1, x2, y2],
                                 'center': [(x1 + x2) / 2, (y1 + y2) / 2],
                                 'width': x2 - x1,
