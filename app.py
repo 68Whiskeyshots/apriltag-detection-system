@@ -467,7 +467,9 @@ def get_object_detection_status():
         'enabled': cam.object_detection_enabled,
         'class_names': cam.object_detector.get_class_names(),
         'confidence_threshold': cam.object_detector.confidence_threshold,
-        'nms_threshold': cam.object_detector.nms_threshold
+        'nms_threshold': cam.object_detector.nms_threshold,
+        'frame_skip': cam.object_detector.skip_frames,
+        'performance_stats': cam.object_detector.get_performance_stats()
     })
 
 @app.route('/api/object_detection/config', methods=['POST'])
@@ -479,14 +481,20 @@ def update_object_detection_config():
     try:
         confidence = data.get('confidence_threshold')
         nms = data.get('nms_threshold')
+        frame_skip = data.get('frame_skip')
         
         cam.object_detector.update_thresholds(confidence, nms)
+        
+        if frame_skip is not None:
+            cam.object_detector.set_frame_skip(int(frame_skip))
         
         return jsonify({
             'success': True,
             'message': 'Configuration updated successfully',
             'confidence_threshold': cam.object_detector.confidence_threshold,
-            'nms_threshold': cam.object_detector.nms_threshold
+            'nms_threshold': cam.object_detector.nms_threshold,
+            'frame_skip': cam.object_detector.skip_frames,
+            'performance_stats': cam.object_detector.get_performance_stats()
         })
     except Exception as e:
         return jsonify({

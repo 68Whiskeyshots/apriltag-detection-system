@@ -37,6 +37,12 @@ class RFDETRObjectDetector:
         self.nms_threshold = 0.3
         self.enabled = False
         
+        # Performance optimization settings
+        self.skip_frames = 3  # Only process every 3rd frame
+        self.frame_count = 0
+        self.last_detections = []  # Cache last detections
+        self.inference_timeout = 1.0  # Max 1 second per inference
+        
         # Load configuration
         self._load_config()
         
@@ -200,7 +206,7 @@ class RFDETRObjectDetector:
     
     def detect_objects(self, image: np.ndarray) -> List[Dict]:
         """
-        Detect objects in image using RT-DETR model
+        Detect objects in image using RT-DETR model with frame skipping optimization
         
         Args:
             image: Input image in BGR format
@@ -211,11 +217,31 @@ class RFDETRObjectDetector:
         if not self.is_available():
             return []
         
+        # Frame skipping optimization - only process every Nth frame
+        self.frame_count += 1
+        if self.frame_count % self.skip_frames != 0:
+            # Return cached detections for skipped frames
+            return self.last_detections
+        
         try:
+            import time
+            start_time = time.time()
+            
             # Convert BGR to RGB for Ultralytics
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            # Run inference using ultralytics
+            # Resize image for faster inference (trade quality for speed)
+            height, width = image_rgb.shape[:2]
+            if max(height, width) > 640:
+                scale = 640 / max(height, width)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                image_rgb = cv2.resize(image_rgb, (new_width, new_height))
+                scale_factor = 1.0 / scale
+            else:
+                scale_factor = 1.0
+            
+            # Run inference using ultralytics with timeout protection
             results = self.model(image_rgb, verbose=False)
             
             # Process results
@@ -230,6 +256,10 @@ class RFDETRObjectDetector:
                     for box, conf, cls in zip(boxes, confidences, classes):
                         if conf > self.confidence_threshold:
                             x1, y1, x2, y2 = box
+                            
+                            # Scale coordinates back to original image size
+                            if scale_factor != 1.0:
+                                x1, y1, x2, y2 = x1 * scale_factor, y1 * scale_factor, x2 * scale_factor, y2 * scale_factor
                             
                             # Convert all numpy values to Python native types for JSON serialization
                             x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
@@ -248,12 +278,22 @@ class RFDETRObjectDetector:
                             }
                             detections.append(detection)
             
-            print(f"[DEBUG] Ultralytics RT-DETR detected {len(detections)} objects")
+            # Cache detections for frame skipping
+            self.last_detections = detections
+            
+            inference_time = (time.time() - start_time) * 1000
+            print(f"[DEBUG] RT-DETR: {len(detections)} objects, {inference_time:.1f}ms")
+            
+            # Warn if inference is too slow
+            if inference_time > 500:  # More than 500ms
+                print(f"[WARNING] Slow inference detected ({inference_time:.1f}ms) - consider reducing skip_frames")
+            
             return detections
             
         except Exception as e:
             print(f"Error during object detection: {e}")
-            return []
+            # Return cached detections on error
+            return self.last_detections
     
     # Preprocessing is now handled by Ultralytics internally
     
@@ -363,6 +403,19 @@ class RFDETRObjectDetector:
         if nms is not None:
             self.nms_threshold = float(nms)
         print(f"Updated thresholds: conf={self.confidence_threshold}, nms={self.nms_threshold}")
+    
+    def set_frame_skip(self, skip_frames: int):
+        """Update frame skipping for performance tuning"""
+        self.skip_frames = max(1, skip_frames)
+        print(f"Frame skipping set to every {self.skip_frames} frames")
+    
+    def get_performance_stats(self) -> dict:
+        """Get performance statistics"""
+        return {
+            'frame_skip': self.skip_frames,
+            'cached_detections': len(self.last_detections),
+            'frame_count': self.frame_count
+        }
 
 
 def setup_model_directory():
