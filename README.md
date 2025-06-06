@@ -33,10 +33,28 @@ Professional detection system combining AprilTag pose estimation with AI object 
 
 ### Professional Interface
 - Enterprise-grade web interface with Dark Matter Labs branding
-- Real-time video streaming with pose overlays
+- **High-performance MJPEG video streaming** with minimal latency
+- **Unified video processing** for optimal performance
+- Real-time pose and object detection overlays
 - Collapsible camera options and object detection panels
 - Live statistics and detection information display
 - Professional notifications and status indicators
+- **Company/Product Image Management** - Upload and manage logos, product images, and templates
+
+### Image Management System
+- Company logos directory with web interface integration
+- RF-DETR debugging directory for automatic misclassification capture
+- Dynamic logo switching via web interface
+- API endpoints for image management
+- Automatic cleanup of old debugging images
+
+### Performance Optimizations
+- **MJPEG Streaming**: Direct video delivery without base64 encoding overhead
+- **Unified Video Processor**: Single-pass processing for both detection types
+- **Camera Buffer Optimization**: Minimal frame latency with buffer size = 1
+- **Frame Stabilization**: 5-frame warmup for stable camera initialization
+- **Server-side FPS Tracking**: Real-time performance monitoring
+- **Asynchronous ML Inference**: Non-blocking object detection pipeline
 
 ## Installation
 
@@ -127,6 +145,26 @@ curl -X POST http://localhost:5000/api/object_detection/config \
   -d '{"confidence_threshold": 0.7, "nms_threshold": 0.3}'
 ```
 
+### Image Management APIs
+```bash
+# List all image categories
+curl http://localhost:5000/api/images/categories
+
+# List images in a category
+curl http://localhost:5000/api/images/list/company
+
+# Upload company logo
+curl -X POST -F "file=@logo.png" http://localhost:5000/api/images/upload/company/
+
+# Update company configuration
+curl -X POST http://localhost:5000/api/images/config \
+  -H "Content-Type: application/json" \
+  -d '{"company": {"name": "Your Company", "main_logo": "company/logo.png"}}'
+
+# Get image information
+curl http://localhost:5000/api/images/info/company/logo.png
+```
+
 ## Command Line Options
 
 ```bash
@@ -166,6 +204,11 @@ apriltag_detect/
 │   ├── README.md              # Model setup guide
 │   ├── model_validation.py    # Validation script
 │   └── download_example_model.py # Example downloader
+├── images/                     # Company logos and debugging
+│   ├── config.json            # Image and debugging configuration
+│   ├── company/               # Company logos (dark_matter_logo.png, bandit.png)
+│   └── debugging/             # RF-DETR misclassification captures
+│       └── rf_detr_misclassifications/
 ├── calibration/               # Calibration data storage
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
